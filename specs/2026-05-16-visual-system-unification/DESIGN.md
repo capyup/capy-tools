@@ -45,10 +45,8 @@ Consequence: a finished page is almost entirely `muted`. When something is runni
 Today, an active thinking step is `accent + bold` and an active tool call inherits the same headline color as its done sibling — neither approach is consistent and the bold/color combo is visually noisy. The new rule:
 
 - **Done** item: marker is `•` in Tier 2 (`muted`).
-- **Running** item: marker is a spinner frame in Tier 1 (`warning`). Text stays Tier 3 (`muted`).
+- **Running** item: marker in Tier 1 (`warning`). Thinking uses its existing animated `pulseGlyph` (cycle through `· • ● •`); tool items use a single static `◐` glyph. These belong to the same visual family (rounded dots) so the page reads consistently, but the tool-group renderer does not need a per-tick redraw loop. Item text stays Tier 3 (`muted`).
 - **Error** item: marker is `!` in `error` color; text in `error` color.
-
-The thinking-steps spinner already exists (`thinking-steps/render.ts` has a frames helper). The tool-group renderer will reuse the same frames source so the spinner glyph is identical across components.
 
 ### Role glyphs lose their color
 
@@ -90,7 +88,7 @@ These two functions only fire when `basic-tool-grouping` context is unavailable;
 
 **Spinner frame source**
 
-A single helper (extracted from `thinking-steps/render.ts`) is imported by `basic-tool-grouping.ts` so both components use the same frames and the same warning color. Living location: `extensions/spinner.ts` (new file at the same level as the other extensions, since there is no existing `_shared/` precedent in this repo). Exports a single function returning the framed glyph; both consumers pass their own per-render frame index.
+No new shared module. `thinking-steps/render.ts` keeps its existing `pulseGlyph`. `basic-tool-grouping.ts` uses a single static `◐` warning marker — the tool-group renderer does not have a tick loop and adding one would inflate the change scope. The two glyph families (animated `· • ● •` and static `◐`) share the rounded-dot visual family so consistency is preserved.
 
 ### Out of scope: TodoOverlay widget content color
 
@@ -125,7 +123,7 @@ These four rules already exist inside `PROMPT_GUIDELINES`. The change is that th
 ## Risks
 
 - **TUI capture regressions.** Multiple existing snapshot tests assert on rendered colors. Every spec change above will break at least one snapshot. The plan must call out which captures need refreshing and require a real-Pi `npm run test:tui-capture:current` confirmation before considering the work done.
-- **Spinner frame drift.** Pulling spinner frames into `_shared/` means thinking-steps's local copy must be deleted, not left behind, or the two will drift. Implementation must replace, not duplicate.
+- **Glyph drift.** Two separate marker sources (animated thinking pulse vs. static tool-item `◐`) can drift in visual feel if either side changes glyph family. Mitigation: both live within the same `extensions/` directory and the design note above documents the rounded-dot family as the shared constraint.
 - **Todo injection inflation.** Each per-turn injection costs tokens. The injected section must stay under ~6 short lines.
 - **Bold-on-active-thinking-step in mismatched terminals.** Some terminal themes render bold as a different color. We accept this — the user's terminal already has acceptable bold rendering for thinking-steps today.
 
