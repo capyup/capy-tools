@@ -399,11 +399,49 @@ export function renderThinkingStepsLines(theme: ThinkingThemeLike, width: number
   return renderSummary(theme, width, options.steps, options.activeStepId, options.isActive);
 }
 
+type MergeRegistryEntry = {
+  primary: ThinkingStepsComponent;
+  blocks: ThinkingSourceBlock[];
+};
+
+const MERGE_REGISTRY_KEY = Symbol.for("pi-basic-tools.thinking-steps.merge-registry");
+
+function getMergeRegistry(): Map<string, MergeRegistryEntry> {
+  const existing = (globalThis as Record<PropertyKey, unknown>)[MERGE_REGISTRY_KEY];
+  if (existing instanceof Map) return existing as Map<string, MergeRegistryEntry>;
+  const created = new Map<string, MergeRegistryEntry>();
+  (globalThis as Record<PropertyKey, unknown>)[MERGE_REGISTRY_KEY] = created;
+  return created;
+}
+
+function mergeRegistryKey(scopeKey: string, messageTimestamp: number): string {
+  return `${scopeKey}::${messageTimestamp}`;
+}
+
+export function clearThinkingMergeRegistry(scopeKey?: string, messageTimestamp?: number): void {
+  const registry = getMergeRegistry();
+  if (scopeKey === undefined && messageTimestamp === undefined) {
+    registry.clear();
+    return;
+  }
+  if (scopeKey !== undefined && messageTimestamp !== undefined) {
+    registry.delete(mergeRegistryKey(scopeKey, messageTimestamp));
+    return;
+  }
+  if (scopeKey !== undefined) {
+    for (const key of [...registry.keys()]) {
+      if (key.startsWith(`${scopeKey}::`)) registry.delete(key);
+    }
+  }
+}
+
 export class ThinkingStepsComponent implements Component {
   private steps: DerivedThinkingStep[];
   private cacheKey?: string;
   private cachedLines?: string[];
   private readonly scopeKey: string;
+  private readonly sourceBlocks: ThinkingSourceBlock[];
+  private isShadow = false;
 
   constructor(
     private readonly theme: ThinkingThemeLike,
@@ -411,18 +449,44 @@ export class ThinkingStepsComponent implements Component {
     blocks: ThinkingSourceBlock[],
     scopeKey?: string,
   ) {
-    this.steps = deriveThinkingSteps(blocks);
+    this.sourceBlocks = [...blocks];
     this.scopeKey = scopeKey ?? getCurrentThinkingScopeKey();
+    this.steps = deriveThinkingSteps(this.sourceBlocks);
+
+    const registry = getMergeRegistry();
+    const key = mergeRegistryKey(this.scopeKey, this.messageTimestamp);
+    const existing = registry.get(key);
+    if (existing) {
+      existing.primary.appendBlocks(this.sourceBlocks);
+      this.isShadow = true;
+    } else {
+      registry.set(key, { primary: this, blocks: this.sourceBlocks });
+    }
+  }
+
+  /** Called by a subsequent same-message component to fold its blocks into the primary. */
+  appendBlocks(extra: ThinkingSourceBlock[]): void {
+    let added = false;
+    for (const block of extra) {
+      if (this.sourceBlocks.some((existing) => existing.contentIndex === block.contentIndex)) continue;
+      this.sourceBlocks.push(block);
+      added = true;
+    }
+    if (added) {
+      this.steps = deriveThinkingSteps(this.sourceBlocks);
+      this.invalidate();
+    }
   }
 
   render(width: number): string[] {
+    if (this.isShadow) return [];
     const mode = getThinkingStepsMode(this.scopeKey);
     const active = getActiveThinkingState(this.messageTimestamp, this.scopeKey);
     const activeStepId = active.active && active.contentIndex !== undefined
       ? [...this.steps].reverse().find((step) => step.contentIndex === active.contentIndex)?.id
       : undefined;
     const shouldBypassCache = mode === "collapsed" && active.active;
-    const nextCacheKey = `${width}:${mode}:${active.active ? 1 : 0}:${activeStepId ?? ""}`;
+    const nextCacheKey = `${width}:${mode}:${active.active ? 1 : 0}:${activeStepId ?? ""}:${this.sourceBlocks.length}`;
     if (!shouldBypassCache && this.cachedLines && this.cacheKey === nextCacheKey) {
       return this.cachedLines;
     }

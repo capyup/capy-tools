@@ -249,6 +249,36 @@ describe("thinking-steps parse + render", () => {
     expect(activeRow).toBeDefined();
   });
 
+  test("multiple thinking blocks within one message merge into one component", () => {
+    setCurrentThinkingScopeKey("merge-test");
+    setThinkingStepsMode("summary", "merge-test");
+    clearActiveThinkingState(undefined, "merge-test");
+
+    const messageTimestamp = 1234567890;
+    // Two thinking blocks, each with one short paragraph (parser yields one step each).
+    const block1: ThinkingSourceBlock[] = [{ contentIndex: 0, text: "Inspect Users/lucas." }];
+    const block2: ThinkingSourceBlock[] = [{ contentIndex: 2, text: "Verify file size and pages." }];
+
+    const c1 = new ThinkingStepsComponent(widthSafeTheme, messageTimestamp, block1, "merge-test");
+    const c2 = new ThinkingStepsComponent(widthSafeTheme, messageTimestamp, block2, "merge-test");
+
+    // After redesign: the second component for the same message timestamp
+    // returns [], its steps merged into the first.
+    const linesFirst = c1.render(200);
+    const linesSecond = c2.render(200);
+
+    expect(linesSecond).toEqual([]);
+    // First component now renders 2 steps under one header.
+    const stepRows = linesFirst.filter((line) => line.includes("├ ") || line.includes("└ "));
+    expect(stepRows.length).toBe(2);
+    expect(linesFirst.some((line) => line.includes("Inspect"))).toBe(true);
+    expect(linesFirst.some((line) => line.includes("Verify"))).toBe(true);
+    expect(linesFirst[0]).toContain("Thinking Steps");
+    expect(linesFirst[0]).toContain("2 thoughts");
+
+    clearActiveThinkingState(undefined, "merge-test");
+  });
+
   test("ThinkingStepsComponent honours the scope mode", () => {
     const scopeKey = "test-scope";
     setCurrentThinkingScopeKey(scopeKey);
