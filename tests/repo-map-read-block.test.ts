@@ -647,7 +647,7 @@ describe("enable-builtin-search", () => {
     expect(rendered).not.toContain("  └ ");
   });
 
-  test("leaves edit and write renderers on the built-in preview path", async () => {
+  test("leaves edit renderer on the built-in preview path and write on the framework default", async () => {
     const enableBuiltinSearchExtension = (await import("../extensions/enable-builtin-search.ts")).default;
     const { resetBasicToolGroupingForTests } = await import("../extensions/basic-tool-grouping.ts");
     resetBasicToolGroupingForTests();
@@ -663,16 +663,12 @@ describe("enable-builtin-search", () => {
       plainTheme(),
       { toolCallId: "edit-default", state: {}, cwd: process.cwd(), argsComplete: false, invalidate() {} },
     ));
-    const writeRendered = renderComponent(write.renderCall(
-      { path: "sample.ts", content: "hello\n" },
-      plainTheme(),
-      { toolCallId: "write-default", lastComponent: undefined, argsComplete: false, expanded: false, isPartial: false },
-    ));
 
     expect(editRendered).toContain("edit");
-    expect(writeRendered).toContain("write");
     expect(editRendered).not.toContain("• Edited");
-    expect(writeRendered).not.toContain("• Edited");
+    expect(write.renderCall).toBeUndefined();
+    expect(write.renderResult).toBeUndefined();
+    expect(write.renderShell).toBeUndefined();
   });
 
   test("preserves call details when later streaming updates have incomplete args", async () => {

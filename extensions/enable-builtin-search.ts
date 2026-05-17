@@ -117,13 +117,6 @@ function registerCompactBuiltInRenderers(pi: ExtensionAPI) {
     promptSnippet: write.promptSnippet,
     promptGuidelines: write.promptGuidelines,
     parameters: write.parameters,
-    renderShell: "self",
-    renderCall(args, theme, context) {
-      return write.renderCall(args, theme, context);
-    },
-    renderResult(result, options, theme, context) {
-      return write.renderResult(result, options, theme, context);
-    },
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       return createWriteTool(ctx.cwd).execute(toolCallId, params, signal, onUpdate);
     },
