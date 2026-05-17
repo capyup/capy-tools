@@ -70,7 +70,8 @@ export interface TreeRowOptions {
 }
 
 const MAX_CONTINUATION_LINES = 3;
-const CONTINUATION_PREFIX = "  │ ";
+const CONTINUATION_PREFIX_LAST = "  │ ";
+const CONTINUATION_PREFIX_MID = "│ │ ";
 
 function splitToWidth(text: string, width: number): { head: string; tail: string } {
   const maxWidth = Math.max(1, width);
@@ -101,8 +102,9 @@ export function renderTreeRow(options: TreeRowOptions): string[] {
   const prefix = `${connectorPainted}${glyphPainted} `;
   const prefixWidth = visibleWidth(connector) + visibleWidth(marker.glyph) + 1;
   const firstWidth = Math.max(1, width - prefixWidth);
-  const continuationPrefixPainted = theme.fg("muted", CONTINUATION_PREFIX);
-  const continuationWidth = Math.max(1, width - visibleWidth(CONTINUATION_PREFIX));
+  const continuationRaw = isLast ? CONTINUATION_PREFIX_LAST : CONTINUATION_PREFIX_MID;
+  const continuationPrefixPainted = theme.fg(connectorColor, continuationRaw);
+  const continuationWidth = Math.max(1, width - visibleWidth(continuationRaw));
 
   const metaSuffix = meta ? `  · ${meta}` : "";
   const fullText = `${headline}${metaSuffix}`;

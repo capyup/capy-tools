@@ -1,7 +1,7 @@
 import { keyHint } from "@earendil-works/pi-coding-agent";
 import { Container, type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { ROLE_GLYPHS, renderTreeRow, type VisualRole, type VisualStatus } from "./shared/visual.ts";
-import { retainToolExecutionPatch } from "./tool-execution-patch.ts";
+import { registerToolDefinitionOverride, retainToolExecutionPatch } from "./tool-execution-patch.ts";
 
 export type BasicToolRole = "inspect" | "search" | "write" | "run" | "network" | "ask" | "plan" | "default";
 
@@ -386,6 +386,21 @@ function plural(noun: string, count: number): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+function roleFragment(role: BasicToolRole, count: number): string {
+  switch (role) {
+    case "run": return `ran ${plural("command", count)}`;
+    case "write": return `edited ${plural("file", count)}`;
+    case "search": return `searched ${plural("pattern", count)}`;
+    case "inspect": return `read ${plural("file", count)}`;
+    case "network": return `fetched ${plural("resource", count)}`;
+    case "plan": return `tracked ${plural("todo", count)}`;
+    case "ask": return `asked ${plural("question", count)}`;
+    default: return `used ${plural("tool", count)}`;
+  }
+}
+
+const ROLE_DISPLAY_ORDER: BasicToolRole[] = ["run", "write", "search", "inspect", "network", "plan", "ask", "default"];
+
 function groupTitle(group: ToolGroup): string {
   const roles = group.items.map((item) => item.resultSummary?.role ?? item.summary.role ?? roleForTool(item.toolName));
   const total = group.items.length;
@@ -394,7 +409,17 @@ function groupTitle(group: ToolGroup): string {
   if (roles.every((role) => role === "inspect" || role === "search")) return `Explored ${plural("target", total)}`;
   if (roles.every((role) => role === "network")) return `Fetched ${plural("resource", total)}`;
   if (roles.every((role) => role === "plan")) return `Tracked ${plural("todo", total)}`;
-  return `Used ${plural("tool", total)}`;
+
+  const counts = new Map<BasicToolRole, number>();
+  for (const role of roles) counts.set(role, (counts.get(role) ?? 0) + 1);
+  const parts: string[] = [];
+  for (const role of ROLE_DISPLAY_ORDER) {
+    const count = counts.get(role);
+    if (count) parts.push(roleFragment(role, count));
+  }
+  if (parts.length === 0) return `Used ${plural("tool", total)}`;
+  parts[0] = parts[0][0].toUpperCase() + parts[0].slice(1);
+  return parts.join(", ");
 }
 
 function renderGroupLines(group: ToolGroup, expanded: boolean, theme: any, width: number): string[] {
@@ -501,9 +526,42 @@ export function resetBasicToolGroupingForTests(): void {
   stdinState.execCommandBySession.clear();
 }
 
+// Tools registered by other extensions whose call/result rendering we want to
+// reroute through our grouping UI. Each name gets a renderShell: "self" +
+// renderCall/renderResult override that delegates to renderGroupedToolCall /
+// renderGroupedToolResult. The underlying registerTool definition (execute,
+// schema, prompt guidelines) stays with its owning extension — only the UI
+// path changes. See extensions/tool-execution-patch.ts for the prototype
+// patch that consults the override registry.
+const OVERRIDDEN_FOREIGN_TOOLS = ["fffind", "ffgrep", "fff-multi-grep"] as const;
+
+function registerForeignToolOverrides(): void {
+  for (const toolName of OVERRIDDEN_FOREIGN_TOOLS) {
+    registerToolDefinitionOverride(toolName, {
+      renderShell: "self",
+      renderCall(args, theme, context) {
+        return renderGroupedToolCall(
+          toolName,
+          (args ?? {}) as Record<string, any>,
+          theme,
+          context,
+          summarizeToolCall(toolName, (args ?? {}) as Record<string, any>),
+        );
+      },
+      renderResult(result, options, theme, context) {
+        return renderGroupedToolResult(toolName, result, (options ?? {}) as { expanded?: boolean; isPartial?: boolean }, theme, context);
+      },
+    });
+  }
+}
+
 export function installBasicToolGrouping(pi: { on?: (event: string, handler: Function) => void }): void {
   if (state.installed || typeof pi.on !== "function") return;
   state.installed = true;
+
+  // Make pi-fff's fffind / ffgrep / fff-multi-grep render through our grouping
+  // UI (the renderer overrides are idempotent: last write wins).
+  registerForeignToolOverrides();
 
   // Pi may emit turn_start/agent_start while continuing after a tool result, so
   // only user messages and non-basic tool calls act as grouping boundaries.
@@ -660,7 +718,19 @@ export function summarizeToolResult(toolName: string, result: any, fallback?: Ba
   if (toolName === "symbol_outline" && details.displayPath) return { title: "outline", target: details.displayPath, detail: `${details.displayedCount ?? details.blockCount ?? 0} blocks`, role };
   if (toolName === "repo_map" && details.root) return { title: "repo map", target: basename(String(details.root)), detail: `${details.fileCount ?? "?"} files`, role };
   if (toolName === "apply_patch") return { title: "apply patch", detail: `${details.totalFiles ?? 0} files`, role };
-  if (["grep", "find", "ls", "fffind", "ffgrep", "fff-multi-grep"].includes(toolName)) return { ...(fallback ?? { title: toolName, role }), detail: `${lineCount(text)} lines` };
+  if (["fffind", "ffgrep", "fff-multi-grep"].includes(toolName)) {
+    // pi-fff returns details.totalMatched / details.totalFiles (also preserved
+    // by compactExternalBasicToolResult). Build a meaningful "N results in M
+    // files" detail instead of the post-compaction "1 lines".
+    const matched = Number(details.totalMatched);
+    const files = Number(details.totalFiles);
+    const parts: string[] = [];
+    if (Number.isFinite(matched)) parts.push(`${matched} result${matched === 1 ? "" : "s"}`);
+    if (Number.isFinite(files) && files > 0) parts.push(`in ${files} file${files === 1 ? "" : "s"}`);
+    if (parts.length === 0 && text) parts.push(`${lineCount(text)} lines`);
+    return { ...(fallback ?? { title: toolName, role }), detail: parts.join(" ") || undefined };
+  }
+  if (["grep", "find", "ls"].includes(toolName)) return { ...(fallback ?? { title: toolName, role }), detail: `${lineCount(text)} lines` };
   if (toolName === "bash") return { ...(fallback ?? { title: "run", role }), detail: result?.isError ? "failed" : `${lineCount(text)} output lines` };
   if (toolName === "read") return { ...(fallback ?? { title: "read", role }), detail: `${lineCount(text)} lines` };
   if (toolName === "write") return { ...(fallback ?? { title: "write", role }), detail: "written" };

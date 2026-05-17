@@ -174,8 +174,8 @@ describe("grouping showcase - harmless combos", () => {
     const collapsed = render(renderGroupedToolCall("read", { path: "nonexistent-file.xyz" }, theme, ctx("c2", false)), 80);
     console.log("\n=== Combo G: 含 error 的混合组 ===\n" + collapsed);
 
-    // bash(run) + read(inspect) 混合 role，groupTitle 回退到 "Used N tools"
-    expect(collapsed).toContain("Used 2 tools");
+    // bash(run) + read(inspect) 混合 role → role-counted header
+    expect(collapsed).toContain("Ran 1 command, read 1 file");
     expect(collapsed).toContain("├ ");
     expect(collapsed).toContain("└ ");
     // error glyph from shared visual module
@@ -243,6 +243,83 @@ describe("grouping showcase - harmless combos", () => {
 
     expect(render(call)).toBe("");
     expect(render(result)).toBe("");
+  });
+
+  test("combo L: pi-fff tools (fffind + ffgrep) render through grouped UI with totalMatched/totalFiles details", () => {
+    // Verifies that fffind / ffgrep / fff-multi-grep — registered by @ff-labs/pi-fff,
+    // not by us — flow through renderGroupedToolCall / renderGroupedToolResult and
+    // produce the same tree-row visuals as our own grep / find. The ToolExecutionComponent
+    // prototype patch is what connects them at runtime (see tool-execution-patch.ts);
+    // here we exercise the renderer entry points directly.
+    resetBasicToolGroupingForTests();
+    const theme = plainTheme();
+
+    renderGroupedToolCall("fffind", { pattern: "app-server-protocol", path: "references/codex/codex-rs", limit: 30 }, theme, ctx("f1"));
+    renderGroupedToolCall("ffgrep", { pattern: "start_control_socket_acceptor", path: "references/codex/codex-rs" }, theme, ctx("f2"));
+    renderGroupedToolCall("fff-multi-grep", { patterns: ["submit_op", "legacy_core"], path: "references/codex/codex-rs/tui/src" }, theme, ctx("f3"));
+
+    // Results carry pi-fff's totalMatched / totalFiles so the detail meta reads
+    // "N results in M files" instead of the post-compaction "1 lines".
+    renderGroupedToolResult(
+      "fffind",
+      okResult("Find app-server-protocol in references/codex/codex-rs · 883 results in 9070 files", { totalMatched: 883, totalFiles: 9070 }),
+      { expanded: false, isPartial: false },
+      theme,
+      ctx("f1"),
+    );
+    renderGroupedToolResult(
+      "ffgrep",
+      okResult("Search start_control_socket_acceptor in references/codex/codex-rs · 9 results in 9070 files", { totalMatched: 9, totalFiles: 9070 }),
+      { expanded: false, isPartial: false },
+      theme,
+      ctx("f2"),
+    );
+    renderGroupedToolResult(
+      "fff-multi-grep",
+      okResult("Search submit_op, legacy_core in references/codex/codex-rs/tui/src · 108 results in 9070 files", { totalMatched: 108, totalFiles: 9070 }),
+      { expanded: false, isPartial: false },
+      theme,
+      ctx("f3"),
+    );
+
+    const collapsed = render(renderGroupedToolCall("fff-multi-grep", { patterns: ["submit_op", "legacy_core"], path: "references/codex/codex-rs/tui/src" }, theme, ctx("f3", false)), 80);
+    console.log("\n=== Combo L: pi-fff tools through grouped UI ===\n" + collapsed);
+
+    // All three roll up under the standard search/inspect group title.
+    expect(collapsed).toContain("Explored 3 targets");
+    expect(collapsed).toContain("Find app-server-protocol");
+    expect(collapsed).toContain("Search start_control_socket_acceptor");
+    expect(collapsed).toContain("Search submit_op, legacy_core");
+    // Details from pi-fff details.totalMatched / details.totalFiles surface in the meta column.
+    expect(collapsed).toContain("883 results in 9070 files");
+    expect(collapsed).toContain("9 results in 9070 files");
+    expect(collapsed).toContain("108 results in 9070 files");
+    // Tree connectors confirm grouping rendered through our shared tree-row helper.
+    expect(collapsed).toContain("├ ");
+    expect(collapsed).toContain("└ ");
+  });
+
+  test("combo M: single pi-fff call renders as one-line action without group title", () => {
+    resetBasicToolGroupingForTests();
+    const theme = plainTheme();
+
+    renderGroupedToolCall("fffind", { pattern: "*.rs", path: "references/codex/codex-rs" }, theme, ctx("f1"));
+    renderGroupedToolResult(
+      "fffind",
+      okResult("Find *.rs in references/codex/codex-rs · 42 results in 9070 files", { totalMatched: 42, totalFiles: 9070 }),
+      { expanded: false, isPartial: false },
+      theme,
+      ctx("f1"),
+    );
+
+    const solo = render(renderGroupedToolCall("fffind", { pattern: "*.rs", path: "references/codex/codex-rs" }, theme, ctx("f1", false)), 100);
+    console.log("\n=== Combo M: single pi-fff call ===\n" + solo);
+
+    expect(solo).toContain("Find *.rs");
+    expect(solo).toContain("42 results in 9070 files");
+    expect(solo).not.toContain("Explored 1 targets");
+    expect(solo).not.toContain("├ ");
+    expect(solo).not.toContain("└ ");
   });
 
   test("combo K: only the latest slot in a group renders — earlier slots stay empty", () => {

@@ -387,7 +387,7 @@ export default function terminalSessionExtension(pi: ExtensionAPI): void {
       return renderGroupedToolCall("exec_command", args, theme, context, summarizeToolCall("exec_command", args));
     },
     renderResult(result, options, theme, context) {
-      if (options.expanded || !canGroupTool(context)) return renderTerminalResult("exec command", result, options, theme, context?.args);
+      if (!canGroupTool(context)) return renderTerminalResult("exec command", result, options, theme, context?.args);
       return renderGroupedToolResult("exec_command", result, options, theme, context);
     },
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -488,7 +488,7 @@ export default function terminalSessionExtension(pi: ExtensionAPI): void {
       return renderGroupedToolCall("write_stdin", args, theme, context, summarizeToolCall("write_stdin", args));
     },
     renderResult(result, options, theme, context) {
-      if (options.expanded || !canGroupTool(context)) return renderTerminalResult("write stdin", result, options, theme, context?.args);
+      if (!canGroupTool(context)) return renderTerminalResult("write stdin", result, options, theme, context?.args);
       return renderGroupedToolResult("write_stdin", result, options, theme, context);
     },
     async execute(_toolCallId, params) {

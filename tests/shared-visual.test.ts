@@ -113,6 +113,6 @@ describe("shared visual module", () => {
       meta: undefined,
     });
     expect(lines.length).toBeGreaterThan(1);
-    expect(lines[1]).toContain("<muted>  │ </muted>");
+    expect(lines[1]).toContain("<muted>│ │ </muted>");
   });
 });

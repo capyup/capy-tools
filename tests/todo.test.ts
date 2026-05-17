@@ -199,7 +199,7 @@ describe("todo render — per-call single-line + grouping", () => {
     expect(renderComponent(first)).toContain("Started Fix non-fast backup path");
 
     const grouped = renderComponent(renderGroupedToolCall("bash", { command: "ssh ubuntu@example 'set -e'" }, plainTheme, ctx2));
-    expect(grouped).toContain("Used 2 tools");
+    expect(grouped).toContain("Ran 1 command, tracked 1 todo");
     expect(grouped).toContain("Started Fix non-fast backup path");
     expect(grouped).toContain("Ran ssh ubuntu@example 'set -e'");
 
