@@ -754,26 +754,26 @@ describe("enable-builtin-search", () => {
     expect(latest).not.toContain("cap-0");
   });
 
-  test("treats work_checkpoint as a non-basic boundary outside grouped tools", async () => {
+  test("treats recap as a non-basic boundary outside grouped tools", async () => {
     const enableBuiltinSearchExtension = (await import("../extensions/enable-builtin-search.ts")).default;
-    const workCheckpointExtension = (await import("../extensions/work-checkpoint.ts")).default;
+    const recapExtension = (await import("../extensions/recap.ts")).default;
     const { resetBasicToolGroupingForTests } = await import("../extensions/basic-tool-grouping.ts");
     resetBasicToolGroupingForTests();
 
-    const allTools = ["read", "bash", "edit", "write", "grep", "find", "ls", "work_checkpoint"].map(builtinTool);
+    const allTools = ["read", "bash", "edit", "write", "grep", "find", "ls", "recap"].map(builtinTool);
     const host = createExtensionHost({ activeTools: ["read", "bash", "edit", "write"], allTools });
     enableBuiltinSearchExtension(host.api as any);
-    workCheckpointExtension(host.api as any);
+    recapExtension(host.api as any);
 
     const grep = host.getTool("grep");
     const find = host.getTool("find");
-    renderComponent(grep.renderCall({ pattern: "before-checkpoint" }, plainTheme(), { toolCallId: "checkpoint-grep", executionStarted: true, expanded: false, invalidate() {} }));
+    renderComponent(grep.renderCall({ pattern: "before-recap" }, plainTheme(), { toolCallId: "recap-grep", executionStarted: true, expanded: false, invalidate() {} }));
 
-    await host.emit("tool_execution_start", { toolName: "work_checkpoint", toolCallId: "checkpoint", args: {} });
-    const next = renderComponent(find.renderCall({ pattern: "after-checkpoint" }, plainTheme(), { toolCallId: "checkpoint-find", executionStarted: true, expanded: false, invalidate() {} }));
+    await host.emit("tool_execution_start", { toolName: "recap", toolCallId: "recap", args: {} });
+    const next = renderComponent(find.renderCall({ pattern: "after-recap" }, plainTheme(), { toolCallId: "recap-find", executionStarted: true, expanded: false, invalidate() {} }));
 
-    expect(next).toContain("after-checkpoint");
-    expect(next).not.toContain("before-checkpoint");
+    expect(next).toContain("after-recap");
+    expect(next).not.toContain("before-recap");
     expect(next).not.toContain("TOOLS");
   });
 

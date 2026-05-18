@@ -10,7 +10,8 @@ import askUserExtension from "./ask-user.ts";
 import askQuestionExtension from "./ask-question.ts";
 import askQuestionnaireExtension from "./ask-questionnaire.ts";
 import sourcegraphExtension from "./sourcegraph.ts";
-import workCheckpointExtension from "./work-checkpoint.ts";
+import recapExtension from "./recap.ts";
+import messageShapeDiagnosticExtension from "./message-shape-diagnostic.ts";
 import thinkingStepsExtension from "./thinking-steps/index.ts";
 import todoExtension from "./todo/index.ts";
 
@@ -27,7 +28,9 @@ export default function piBasicToolsExtension(pi: ExtensionAPI): void {
   askQuestionExtension(pi);
   askQuestionnaireExtension(pi);
   sourcegraphExtension(pi);
-  workCheckpointExtension(pi);
+  recapExtension(pi);
+  // Opt-in diagnostic: no-op unless PI_BASIC_TOOLS_DIAG_SHAPES is set.
+  messageShapeDiagnosticExtension(pi);
   thinkingStepsExtension(pi);
   todoExtension(pi);
 }

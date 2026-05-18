@@ -17,7 +17,7 @@ This package bundles a practical set of editing, fetch, web-reference, compact b
 - `ask-question` (`ask_question` tool)
 - `ask-questionnaire` (`ask_questionnaire` tool)
 - `sourcegraph`
-- `work-checkpoint` (`work_checkpoint` tool)
+- `recap` (`recap` tool)
 - `thinking-steps` (passive renderer for chain-of-thought blocks; no user-facing controls)
 - `todo` (forked task-tracking tool with a compact above-editor overlay; replays state across `/reload` and compaction)
 
@@ -41,7 +41,17 @@ This package bundles a practical set of editing, fetch, web-reference, compact b
 
 `ask_questionnaire` adds a multi-question TUI for batching related questions with suggested options, recommended defaults, free-text answers, and a submit review screen.
 
-`work_checkpoint` adds a lightweight self-reminder for Codex-style progress narration: after a consecutive group of basic tools ends, the agent should write one short paragraph summarizing what it just did, what it learned, and what it will do next. Agents may also call it between work segments when they need an explicit reminder to pause and summarize before continuing.
+`recap` is the user-facing narration channel. The tool takes a single `text: string` argument (8–12 words) and `renderCall` shows that prose to the user as one italic line; `renderResult` is empty, so the prose appears exactly once. The agent passes the sentence as a tool-call argument instead of emitting it as inline assistant text — this makes narration work the same way across providers whose models route prose into hidden thinking traces (Kimi, Gemini) and providers whose models emit prose inline (Claude). `recap` is intentionally absent from the `basic-tool-grouping` set, so a `recap` call cleanly separates a preamble line from the grouped `Used N tools` block that follows.
+
+The extension contributes a `Recap discipline:` `before_agent_start` system-prompt fragment modelled after `Todo discipline:` and Codex CLI's preamble/progress-update guidance. Concretely:
+
+- **Preamble before a batch** — call `recap({ text: "…" })` as the first tool in any parallel batch of related tool calls, with a forward-looking sentence (8–12 words) describing what the batch is about to do. The other tools run in parallel right after, in the same assistant message.
+- **Progress update between segments** — in longer multi-phase tasks, call `recap({ text: "…" })` between work segments with a sentence that recaps what just finished and signals where the agent is heading next.
+- **Combine** — one `recap` per batch, one per segment. Combine related work into a single preamble or progress update rather than calling `recap` per tool.
+- **Skip when trivial** — skip `recap` for a single trivial action (one file read, one grep) where nothing is worth surfacing.
+- **Tone** — light, friendly, and curious, like a coding partner handing off work.
+
+The prompt uses invitational "discipline" language (no `must` / `Do not` / `---` divider mandates) and ships with concrete `recap({ text: "…" })` call examples, including a parallel-batch shape that pairs `recap` with another tool in the same message. The motivation: an earlier `work_checkpoint` design that mandated a `---` divider plus a structured checkpoint paragraph saw essentially zero agent-initiated calls; making the tool itself the visible narration channel (rather than a reminder to write prose) decouples user-visible narration from each model family's text-vs-thinking emission habits.
 
 `thinking-steps` rewires Pi's built-in thinking renderer so chain-of-thought blocks use `├ `/`└ ` tree connectors with per-role glyphs (◫ inspect, ⌕ search, ✎ write, ▸ run, ↗ network, ◇ plan, ↔ compare, ✓ verify) and the same accent/muted color tokens as `enable-builtin-search`'s compact tool grouping. It is intentionally a passive renderer: no slash command, no shortcut, no status bar entry, and no persistence file. The renderer patches `AssistantMessageComponent` at session start, locks the view to `summary` mode (latest-N chronological steps), and releases the patch on session shutdown so Pi's native renderer comes back automatically. Multiple thinking blocks within one assistant message merge into a single `Thinking Steps · N thoughts` card. Forked from [pi-thinking-steps](https://github.com/fluxgear/pi-thinking-steps) (MIT, fluxgear); see `extensions/thinking-steps/LICENSE` for the original copyright notice.
 
@@ -128,7 +138,7 @@ To validate the user's normal Pi loading path rather than the isolated local-ext
 npm run test:tui-capture:current
 ```
 
-Test coverage includes `repo_map`, `read_block`, `symbol_outline`, `apply_patch`, `exec_command`, `write_stdin`, `ask_user`, `ask_question`, `ask_questionnaire`, `work_checkpoint`, `fetch`, `sourcegraph`, Codex-style compact tool rendering, grouped basic-tool rendering, `enable-builtin-search`, TUI capture harness support, and package wiring. See [`docs/testing.md`](docs/testing.md) for the dependency checklist, public research summary, and recommended pi extension testing workflow.
+Test coverage includes `repo_map`, `read_block`, `symbol_outline`, `apply_patch`, `exec_command`, `write_stdin`, `ask_user`, `ask_question`, `ask_questionnaire`, `recap`, `fetch`, `sourcegraph`, Codex-style compact tool rendering, grouped basic-tool rendering, `enable-builtin-search`, TUI capture harness support, and package wiring. See [`docs/testing.md`](docs/testing.md) for the dependency checklist, public research summary, and recommended pi extension testing workflow.
 
 ## Update
 

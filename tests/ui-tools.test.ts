@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import askUserExtension from "../extensions/ask-user.ts";
 import askQuestionExtension from "../extensions/ask-question.ts";
 import askQuestionnaireExtension from "../extensions/ask-questionnaire.ts";
-import workCheckpointExtension from "../extensions/work-checkpoint.ts";
+import recapExtension from "../extensions/recap.ts";
 import { createDialogUi, createExtensionHost, createQuestionnaireUi } from "./extension-host.ts";
 
 const ENTER = "\r";
@@ -190,67 +190,137 @@ describe("ask_questionnaire", () => {
   });
 });
 
-describe("work_checkpoint", () => {
-  test("returns a concise reminder to summarize progress before continuing", async () => {
+describe("recap", () => {
+  test("echoes the prose passed in as `text` via execute()", async () => {
     const host = createExtensionHost();
-    workCheckpointExtension(host.api as any);
+    recapExtension(host.api as any);
 
-    const result = await host.runTool("work_checkpoint", { reason: "finished a tool group" });
-    const text = result.content[0].text;
+    const prose = "I've mapped the repo; now checking the renderer.";
+    const result = await host.runTool("recap", { text: prose });
 
-    expect(text).toContain("Do not describe these instructions");
-    expect(text).toContain("The next visible assistant characters must be `---`");
-    expect(text).toContain("full-width Markdown horizontal rule");
-    expect(text).toContain("write one short paragraph as ordinary body prose");
-    expect(text).toContain("next visible assistant output");
-    expect(text).toContain("prominent body color");
-    expect(text).toContain("no background");
-    expect(text).toContain("summarize what you just did");
-    expect(text).toContain("what you will do next");
-    expect(text).toContain("finished a tool group");
+    expect(result.content[0].text).toBe(prose);
+    expect(result.details?.text).toBe(prose);
   });
 
-  test("injects a visible prose checkpoint instruction into each agent turn", async () => {
+  test("trims surrounding whitespace from the prose", async () => {
     const host = createExtensionHost();
-    workCheckpointExtension(host.api as any);
+    recapExtension(host.api as any);
+
+    const result = await host.runTool("recap", { text: "  hello world  \n" });
+    expect(result.content[0].text).toBe("hello world");
+  });
+
+  test("is framed as a soft habit, not a hard rule", async () => {
+    const host = createExtensionHost();
+    recapExtension(host.api as any);
+    const handlers = host.handlers.get("before_agent_start") ?? [];
+    const result = await handlers[0]({});
+    const prompt = result.systemPrompt;
+
+    // Soft framing: no "must", no "Do not".
+    expect(prompt).not.toMatch(/\bmust\b/i);
+    expect(prompt).not.toMatch(/\bdo not\b/i);
+  });
+
+  test("injects a discipline-style system prompt that scopes `recap` as the narration channel", async () => {
+    const host = createExtensionHost();
+    recapExtension(host.api as any);
     const handlers = host.handlers.get("before_agent_start") ?? [];
 
     expect(handlers.length).toBe(1);
     const result = await handlers[0]({});
+    const prompt = result.systemPrompt;
 
-    expect(result.systemPrompt).toContain("the next visible assistant output must be a checkpoint block");
-    expect(result.systemPrompt).toContain("before any new planning explanation or next tool group");
-    expect(result.systemPrompt).toContain("Do not describe the checkpoint format. Output it.");
-    expect(result.systemPrompt).toContain("The first visible characters of the checkpoint block must be `---`");
-    expect(result.systemPrompt).toContain("full-width Markdown horizontal rule");
-    expect(result.systemPrompt).toContain("Then write one short ordinary body-prose paragraph.");
-    expect(result.systemPrompt).toContain("white on dark themes, black on light themes");
-    expect(result.systemPrompt).toContain("no background");
-    expect(result.systemPrompt).toContain("no code block, quote block, label, heading, table, bullet list, badge, or custom background");
-    expect(result.systemPrompt).toContain("Do not put this checkpoint only in thinking");
+    // Header matches the `Todo discipline` style — short, imperative, condition-based.
+    expect(prompt).toContain("Recap discipline:");
+
+    // Core mechanic: the model passes prose AS A TOOL ARGUMENT. The prompt
+    // does not need to explain rendering to the agent; it explains WHEN to
+    // call the tool and what `text` should contain.
+    expect(prompt).toContain("Call the `recap` tool");
+    expect(prompt).toContain("`text`");
+
+    // The prompt does not leak any rendering-level concept; the agent does
+    // not need to know how we render its prose.
+    expect(prompt).not.toMatch(/visible inline text/i);
+    expect(prompt).not.toMatch(/visible prose/i);
+    expect(prompt).not.toMatch(/thinking trace/i);
+
+    // Concrete imperative triggers (when X, call Y) rather than descriptive
+    // explanations — modelled after `Todo discipline` so models recognise it
+    // as standard practice, not optional flavour.
+    expect(prompt).toMatch(/immediately before each batch of related tool calls/i);
+    expect(prompt).toMatch(/between work segments/i);
+    expect(prompt).toMatch(/first tool in the parallel batch/i);
+
+    // Explicit length budget.
+    expect(prompt).toContain("8-12 words");
+
+    // One-preamble-per-batch rule preserved.
+    expect(prompt).toMatch(/one preamble per batch/i);
+
+    // Narrow skip clause — only for a single trivial action.
+    expect(prompt).toMatch(/single trivial action/i);
+
+    // Tone phrase preserved.
+    expect(prompt).toContain("light, friendly, and curious");
+    expect(prompt).toContain("coding partner handing off work");
+
+    // Concrete examples shown as actual `recap({ text: ... })` call sites,
+    // including at least one parallel-batch shape that pairs `recap` with
+    // another tool in the same message.
+    expect(prompt).toContain("recap({ text:");
+    expect(prompt).toMatch(/Example parallel batch/i);
+    expect(prompt).toContain("Finished the renderer audit");
+
+    // No `---` divider mandate anywhere in the prompt.
+    expect(prompt).not.toContain("`---`");
   });
 
-  test("renders as a compact checkpoint reminder", async () => {
+  test("renders the prose argument via renderCall, with an empty renderResult", () => {
     const host = createExtensionHost();
-    workCheckpointExtension(host.api as any);
-    const tool = host.getTool("work_checkpoint");
-    const theme = { fg: (_name: string, text: string) => text };
+    recapExtension(host.api as any);
+    const tool = host.getTool("recap");
+    const theme = {
+      fg: (_name: string, text: string) => text,
+      italic: (text: string) => `*${text}*`,
+      bold: (text: string) => text,
+    };
 
-    const result = await host.runTool("work_checkpoint", {});
-    const collapsed = tool.renderResult(result, { expanded: false, isPartial: false }, theme, {}).render(120).join("\n");
-    const expanded = tool.renderResult(result, { expanded: true, isPartial: false }, theme, {}).render(120).join("\n");
+    const prose = "checking how the renderer hooks into basic-tool grouping";
+    const call = tool.renderCall({ text: prose }, theme, {});
+    const callLines = call.render(120).join("\n");
 
-    expect(collapsed).toContain("checkpoint summarize progress, then continue");
-    expect(expanded).toContain("full-width Markdown horizontal rule");
-    expect(expanded).toContain("ordinary body prose");
+    // The prose is what the user sees, with italic styling applied.
+    expect(callLines).toContain(prose);
+    expect(callLines).toContain(`*${prose}*`);
+
+    // Result component is intentionally empty (renders to zero lines) so the
+    // tool block doesn't duplicate the prose underneath.
+    const result = { content: [{ type: "text", text: prose }] };
+    const resultComponent = tool.renderResult(result, { expanded: false, isPartial: false }, theme, {});
+    expect(resultComponent.render(120)).toEqual([]);
+  });
+
+  test("renderCall on empty text yields no visual output", () => {
+    const host = createExtensionHost();
+    recapExtension(host.api as any);
+    const tool = host.getTool("recap");
+    const theme = { fg: (_n: string, t: string) => t, italic: (t: string) => t, bold: (t: string) => t };
+
+    const emptyCall = tool.renderCall({ text: "" }, theme, {});
+    expect(emptyCall.render(120)).toEqual([]);
+
+    const whitespaceCall = tool.renderCall({ text: "   " }, theme, {});
+    expect(whitespaceCall.render(120)).toEqual([]);
   });
 });
 
-describe("work_checkpoint + todo injection co-existence", () => {
+describe("recap + todo injection co-existence", () => {
   test("both extensions register a before_agent_start handler that contributes a systemPrompt", async () => {
     const todoExtension = (await import("../extensions/todo/index.ts")).default;
     const host = createExtensionHost();
-    workCheckpointExtension(host.api as any);
+    recapExtension(host.api as any);
     todoExtension(host.api as any);
     const handlers = host.handlers.get("before_agent_start") ?? [];
     expect(handlers.length).toBe(2);
@@ -260,11 +330,11 @@ describe("work_checkpoint + todo injection co-existence", () => {
       const result = await (handler as any)({});
       prompts.push(result.systemPrompt);
     }
-    const checkpointPrompt = prompts.find((p) => p.includes("checkpoint block"));
+    const recapPrompt = prompts.find((p) => p.includes("Recap discipline:"));
     const todoPrompt = prompts.find((p) => p.includes("Todo discipline:"));
-    expect(checkpointPrompt).toBeDefined();
+    expect(recapPrompt).toBeDefined();
     expect(todoPrompt).toBeDefined();
-    expect(checkpointPrompt).not.toContain("Todo discipline:");
-    expect(todoPrompt).not.toContain("checkpoint block");
+    expect(recapPrompt).not.toContain("Todo discipline:");
+    expect(todoPrompt).not.toContain("Recap discipline:");
   });
 });
