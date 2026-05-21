@@ -1,6 +1,6 @@
 {
   "name": "@capyup/capy-tools",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Capy Tools: capybara-flavoured productivity tools for pi, including repo_map, read_block, symbol_outline, showsignature, apply_patch, exec_command, write_stdin, grouped basic-tool UI, recap, todo, auto-compact, command history, Codex fast mode, custom efforts, Codex goals, RTK bash compression, working messages, ask tools, fetch, Sourcegraph, and built-in search activation.",
   "repository": {
     "type": "git",

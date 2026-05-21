@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.11.1 (2026-05-21)
+
+- **Patch release for the bundled `showsignature` rollout.** Keeps the 0.11 feature set intact while publishing the documentation/provenance polish and completed repository cleanup.
+
 ## 0.11.0 (2026-05-21)
 
 - **Rename the npm package to `@capyup/capy-tools`.** The GitHub repo and plugin brand were already Capy Tools; the npm install name now matches. Install with `pi install npm:@capyup/capy-tools`. The retired `@capyup/pi-basic-tools` package on npm should be removed from pi after upgrading: `pi remove npm:@capyup/pi-basic-tools`.
